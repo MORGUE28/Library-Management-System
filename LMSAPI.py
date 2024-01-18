@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
+import pandas as pd
+import os
 
 # Creating the database engine
 engine = create_engine('sqlite:///library.db', echo=True)
@@ -38,11 +40,23 @@ def get_db():
     finally:
         db.close()
 
+# Function to load data from CSV or create an empty DataFrame
+def load_csv(file_path):
+    if os.path.exists(file_path):
+        return pd.read_csv(file_path)
+    else:
+        return pd.DataFrame()
+
+# Function to save data to CSV
+def save_csv(data, file_path):
+    data.to_csv(file_path, index=False)
+
 # Function to add a new book to the library
 def add_book(db: Session, title: str, author: str):
     new_book = Book(title=title, author=author)
     db.add(new_book)
     db.commit()
+    save_csv(pd.read_sql_table('books', engine), 'library.csv')
 
 # Function to delete a book from the library
 def delete_book(db: Session, book_id: int):
@@ -50,6 +64,7 @@ def delete_book(db: Session, book_id: int):
     if book:
         db.delete(book)
         db.commit()
+        save_csv(pd.read_sql_table('books', engine), 'library.csv')
     else:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -62,6 +77,7 @@ def edit_book(db: Session, book_id: int, title: str = None, author: str = None):
         if author is not None:
             book.author = author
         db.commit()
+        save_csv(pd.read_sql_table('books', engine), 'library.csv')
     else:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -72,6 +88,7 @@ def check_out_book(db: Session, book_id: int, user_id: int):
     if book and user:
         book.checked_out = user.id
         db.commit()
+        save_csv(pd.read_sql_table('books', engine), 'library.csv')
     else:
         raise HTTPException(status_code=404, detail="Book or User not found")
 
@@ -80,11 +97,36 @@ def get_checked_out_users(db: Session):
     checked_out_users = db.query(User).join(Book).filter(Book.checked_out.isnot(None)).distinct().all()
     return checked_out_users
 
+def add_user(db: Session, name: str):
+    new_user = User(name=name)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)  
+    return {"message": "User added successfully","user_id": new_user.id}
+
+# Function to get borrowed books by a specific user
+def get_borrowed_books_by_user(db: Session, user_id: int):
+    user = db.query(User).get(user_id)
+    if user:
+        borrowed_books = user.checked_books
+        return [{"id": book.id, "title": book.title, "author": book.author} for book in borrowed_books]
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
+
+# Function to get all books available in the library
+def get_all_books(db: Session):
+    all_books = db.query(Book).all()
+    return [{"id": book.id, "title": book.title, "author": book.author} for book in all_books]
+
 # FastAPI endpoints
 @app.post("/books/")
 def create_book(title: str, author: str, db: Session = Depends(get_db)):
     add_book(db, title, author)
     return {"message": "Book added successfully"}
+
+@app.post("/users/")
+def create_user(name: str, db: Session = Depends(get_db)):
+    return add_user(db, name)
 
 @app.delete("/books/{book_id}")
 def remove_book(book_id: int, db: Session = Depends(get_db)):
@@ -96,6 +138,11 @@ def modify_book(book_id: int, title: str, author: str, db: Session = Depends(get
     edit_book(db, book_id, title, author)
     return {"message": "Book edited successfully"}
 
+@app.get("/books/")
+def view_all_books(db: Session = Depends(get_db)):
+    all_books = get_all_books(db)
+    return {"all_books": all_books}
+
 @app.post("/books/{book_id}/checkout/{user_id}")
 def checkout_book(book_id: int, user_id: int, db: Session = Depends(get_db)):
     check_out_book(db, book_id, user_id)
@@ -105,3 +152,9 @@ def checkout_book(book_id: int, user_id: int, db: Session = Depends(get_db)):
 def get_checked_out_users_endpoint(db: Session = Depends(get_db)):
     checked_out_users = get_checked_out_users(db)
     return {"checked_out_users": [{"id": user.id, "name": user.name} for user in checked_out_users]}
+
+# FastAPI endpoint to get borrowed books by a specific user
+@app.get("/users/{user_id}/borrowed-books/")
+def get_borrowed_books(user_id: int, db: Session = Depends(get_db)):
+    borrowed_books = get_borrowed_books_by_user(db, user_id)
+    return {"borrowed_books": borrowed_books}
