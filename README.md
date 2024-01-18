@@ -29,7 +29,7 @@ docker run -p 80:80 lmsapi
 The application will be accessible at [http://localhost:80](http://localhost:80).
 
 ### Docker Image link : [https://hub.docker.com/r/morgue28/lmsimage](https://hub.docker.com/r/morgue28/lmsimage)
-
+#### CMD:
 ```bash
 docker pull morgue28/lmsimage:latest
 docker run -t -p 8080 morgue28/lmsimage
