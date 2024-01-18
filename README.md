@@ -84,4 +84,5 @@ docker run -t -p 8080 morgue28/lmsimage
 
 Feel free to explore the API endpoints and customize the application according to your requirements.
 
-#Screenshots:
+## Screenshots:
+![image](https://github.com/MORGUE28/Library-Management-System/assets/73026328/55e58947-7ef3-4c17-91f9-f9cd2750a78a)
